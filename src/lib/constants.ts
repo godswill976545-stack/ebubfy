@@ -1,0 +1,47 @@
+export const YOUTUBE_THUMBNAIL = (id: string) =>
+  `https://img.youtube.com/vi/${id}/maxresdefault.jpg`;
+
+export const THEMES = {
+  light: {
+    name: "Light",
+    bg: "#f5f5f7",
+    surface: "#ffffff",
+    surfaceHover: "#f0f0f4",
+    surfaceActive: "#e8e8ee",
+    border: "#e5e7eb",
+    text: "#1a1a2e",
+    textSecondary: "#6b7280",
+    textMuted: "#9ca3af",
+    primary: "#3B82F6",
+    primaryHover: "#2563eb",
+    accent: "#3B82F6",
+  },
+  dark: {
+    name: "Dark",
+    bg: "#0a0a0a",
+    surface: "#121212",
+    surfaceHover: "#1a1a1a",
+    surfaceActive: "#222222",
+    border: "#282828",
+    text: "#ffffff",
+    textSecondary: "#a1a1a1",
+    textMuted: "#6a6a6a",
+    primary: "#8b5cf6",
+    primaryHover: "#a78bfa",
+    accent: "#8b5cf6",
+  },
+  midnight: {
+    name: "Midnight Blue",
+    bg: "#0a0f1a",
+    surface: "#111827",
+    surfaceHover: "#1a2332",
+    surfaceActive: "#1f2937",
+    border: "#2d3748",
+    text: "#ffffff",
+    textSecondary: "#94a3b8",
+    textMuted: "#64748b",
+    primary: "#3b82f6",
+    primaryHover: "#60a5fa",
+    accent: "#3b82f6",
+  },
+} as const;
