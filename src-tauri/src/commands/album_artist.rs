@@ -161,8 +161,8 @@ pub async fn get_artist_data(artist_name: String) -> Result<ArtistData, String> 
 
 #[tauri::command]
 pub async fn get_artist_albums(artist_name: String) -> Result<Vec<AlbumData>, String> {
-    let albums = match deezer::fetch_artist(&artist_name).await {
-        Some(artist) => artist.albums,
+    let albums = match deezer::fetch_artist_albums(&artist_name).await {
+        Some(albums) => albums,
         None => return Ok(Vec::new()),
     };
 

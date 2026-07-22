@@ -44,7 +44,7 @@ pub struct DeezerAlbum {
     #[serde(default)]
     pub label: String,
     #[serde(default)]
-    pub genres: HashMap<String, String>,
+    pub genres: serde_json::Value,
 }
 
 #[derive(Debug, Deserialize, Clone, Default)]
@@ -149,25 +149,45 @@ fn client() -> &'static reqwest::Client {
     })
 }
 
-const _TTL_SECS: u64 = 7 * 24 * 60 * 60; // 7 days
+const CACHE_TTL_SECS: u64 = 24 * 60 * 60; // 24 hours
+const CACHE_MAX_ENTRIES: usize = 500;
 
-static CACHE: OnceLock<std::sync::Mutex<HashMap<String, String>>> = OnceLock::new();
-fn cache_map() -> &'static std::sync::Mutex<HashMap<String, String>> {
+static CACHE: OnceLock<std::sync::Mutex<HashMap<String, (String, std::time::Instant)>>> = OnceLock::new();
+fn cache_map() -> &'static std::sync::Mutex<HashMap<String, (String, std::time::Instant)>> {
     CACHE.get_or_init(|| std::sync::Mutex::new(HashMap::new()))
 }
 
 fn cache_get(key: &str) -> Option<String> {
     let map = cache_map().lock().ok()?;
-    let entry = map.get(key)?;
-    if entry.is_empty() {
+    let (value, inserted_at) = map.get(key)?;
+    if inserted_at.elapsed().as_secs() > CACHE_TTL_SECS {
+        // Entry expired — remove it lazily
+        drop(map);
+        if let Ok(mut map) = cache_map().lock() {
+            map.remove(key);
+        }
         return None;
     }
-    Some(entry.clone())
+    Some(value.clone())
 }
 
 fn cache_put(key: &str, value: &str) {
     if let Ok(mut map) = cache_map().lock() {
-        map.insert(key.to_string(), value.to_string());
+        // Evict expired entries and enforce max size
+        if map.len() >= CACHE_MAX_ENTRIES {
+            let now = std::time::Instant::now();
+            map.retain(|_, (_, t)| now.duration_since(*t).as_secs() <= CACHE_TTL_SECS);
+            // If still over limit after eviction, remove oldest entries
+            if map.len() >= CACHE_MAX_ENTRIES {
+                let mut entries: Vec<_> = map.iter().map(|(k, (_, t))| (k.clone(), *t)).collect();
+                entries.sort_by_key(|(_, t)| *t);
+                let to_remove = entries.len() - CACHE_MAX_ENTRIES + 50;
+                for (k, _) in entries.into_iter().take(to_remove) {
+                    map.remove(&k);
+                }
+            }
+        }
+        map.insert(key.to_string(), (value.to_string(), std::time::Instant::now()));
     }
 }
 
@@ -199,12 +219,15 @@ async fn fetch_json<T: for<'de> Deserialize<'de>>(url: &str) -> Result<T, String
     serde_json::from_str::<T>(&body).map_err(|e| format!("Deezer JSON parse: {}", e))
 }
 
-fn extract_genre(genres: &HashMap<String, String>) -> Option<String> {
+/// Extract the first genre name from Deezer's nested `{"data": [{"id": ..., "name": ...}]}` structure.
+fn extract_genre(genres: &serde_json::Value) -> Option<String> {
     genres
-        .get("data")
-        .and_then(|v| serde_json::from_str::<Vec<HashMap<String, String>>>(v).ok())
-        .and_then(|list| list.into_iter().next())
-        .and_then(|g| g.get("name").cloned())
+        .get("data")?
+        .as_array()?
+        .first()?
+        .get("name")?
+        .as_str()
+        .map(|s| s.to_string())
 }
 
 // ─── Public API ────────────────────────────────────────────────────────────
@@ -365,6 +388,53 @@ pub async fn fetch_artist(artist_name: &str) -> Option<ArtistInfo> {
     })
 }
 
+/// Get albums for an artist by name (cheaper than fetching full artist info).
+pub async fn fetch_artist_albums(artist_name: &str) -> Option<Vec<PublicAlbum>> {
+    // First find the artist ID
+    let url = format!(
+        "{}/search/artist?q={}&limit=1",
+        BASE_URL,
+        urlencoding::encode(artist_name)
+    );
+    let resp: SearchResponse<DeezerArtist> = fetch_json(&url).await.ok()?;
+    let artist = resp.data.into_iter().next()?;
+    if artist.id == 0 {
+        return None;
+    }
+
+    let albums_url = format!("{}/artist/{}/albums?limit=30", BASE_URL, artist.id);
+    let albums_res: DeezerAlbumsResponse = fetch_json(&albums_url).await.ok()?;
+
+    let albums = albums_res
+        .data
+        .into_iter()
+        .map(|a| PublicAlbum {
+            id: a.id,
+            title: a.title,
+            cover_medium: if a.cover_big.is_empty() {
+                None
+            } else {
+                Some(a.cover_big)
+            },
+            cover_xl: if a.cover_xl.is_empty() {
+                None
+            } else {
+                Some(a.cover_xl)
+            },
+            release_date: if a.release_date.is_empty() {
+                None
+            } else {
+                Some(a.release_date)
+            },
+            artist_name: a.artist.name,
+            track_count: a.nb_tracks,
+            label: if a.label.is_empty() { None } else { Some(a.label) },
+        })
+        .collect();
+
+    Some(albums)
+}
+
 /// Get a full album with all tracks.
 pub async fn fetch_album(album_name: &str, artist_name: &str) -> Option<PublicAlbumFull> {
     let query = format!("{} {}", artist_name, album_name);
@@ -404,10 +474,10 @@ pub async fn fetch_album(album_name: &str, artist_name: &str) -> Option<PublicAl
     let genres: Vec<String> = full
         .genres
         .get("data")
-        .and_then(|v| serde_json::from_str::<Vec<HashMap<String, String>>>(v).ok())
+        .and_then(|v| v.as_array())
         .map(|list| {
-            list.into_iter()
-                .filter_map(|g| g.get("name").cloned())
+            list.iter()
+                .filter_map(|g| g.get("name").and_then(|n| n.as_str()).map(|s| s.to_string()))
                 .collect()
         })
         .unwrap_or_default();
@@ -490,7 +560,7 @@ struct DeezerAlbumFull {
     #[serde(default)]
     label: String,
     #[serde(default)]
-    genres: HashMap<String, String>,
+    genres: serde_json::Value,
     #[serde(default)]
     tracks: DeezerTracksContainer,
 }

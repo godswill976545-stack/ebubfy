@@ -120,12 +120,8 @@ function App() {
   }, []);
 
   const handlePlayTrack = useCallback(async (track: VideoResult, queue?: VideoResult[]) => {
-    const { setCurrentTrack, setQueue, setIsPlaying } = usePlayerStore.getState();
-    setCurrentTrack(track);
-    if (queue) {
-      setQueue(queue);
-    }
-    setIsPlaying(true);
+    // Use playTrack to correctly set queueIndex (setCurrentTrack + setQueue would reset it to 0)
+    usePlayerStore.getState().playTrack(track, queue);
     try {
       await addRecentlyPlayed({ videoId: track.id, title: track.title, artist: track.artist, thumbnail: track.thumbnail });
       await usePlaylistStore.getState().loadRecentlyPlayed();

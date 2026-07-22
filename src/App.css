@@ -741,10 +741,12 @@
   line-height: 1.45;
   color: var(--text-muted);
   cursor: pointer;
-  transition: color 350ms ease, transform 350ms var(--ease-out-expo), opacity 350ms ease;
+  transition: color 300ms cubic-bezier(0.4, 0, 0.2, 1), transform 300ms cubic-bezier(0.4, 0, 0.2, 1), opacity 300ms cubic-bezier(0.4, 0, 0.2, 1);
   user-select: none;
   padding: var(--space-xs) 0;
   opacity: 0.55;
+  will-change: transform, opacity, color;
+  transform: translateZ(0);
 }
 
 .lyrics-line:hover {

@@ -1,5 +1,5 @@
 import { Play, Pause, RefreshCw, SkipBack, SkipForward, ChevronUp, List } from "lucide-react";
-import { useRef } from "react";
+import { useRef, useMemo, memo } from "react";
 import { usePlayerStore } from "../../store/playerStore";
 import { formatTime } from "../../lib/utils";
 import LazyImage from "../ui/LazyImage";
@@ -9,12 +9,17 @@ interface MiniPlayerProps {
   onToggleQueue?: () => void;
 }
 
-export default function MiniPlayer({ onOpenNowPlaying, onToggleQueue }: MiniPlayerProps) {
-  const {
-    currentTrack, isPlaying, currentTime, duration,
-    setIsPlaying, playNext, playPrevious,
-    audioLoading, audioError, retryAudio,
-  } = usePlayerStore();
+export default memo(function MiniPlayer({ onOpenNowPlaying, onToggleQueue }: MiniPlayerProps) {
+  const currentTrack = usePlayerStore((s) => s.currentTrack);
+  const isPlaying = usePlayerStore((s) => s.isPlaying);
+  const currentTime = usePlayerStore((s) => s.currentTime);
+  const duration = usePlayerStore((s) => s.duration);
+  const setIsPlaying = usePlayerStore((s) => s.setIsPlaying);
+  const playNext = usePlayerStore((s) => s.playNext);
+  const playPrevious = usePlayerStore((s) => s.playPrevious);
+  const audioLoading = usePlayerStore((s) => s.audioLoading);
+  const audioError = usePlayerStore((s) => s.audioError);
+  const retryAudio = usePlayerStore((s) => s.retryAudio);
   const progressRef = useRef<HTMLDivElement>(null);
 
   if (!currentTrack) return null;
@@ -132,4 +137,4 @@ export default function MiniPlayer({ onOpenNowPlaying, onToggleQueue }: MiniPlay
       </div>
     </div>
   );
-}
+});

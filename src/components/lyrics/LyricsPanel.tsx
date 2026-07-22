@@ -1,4 +1,4 @@
-import { useEffect, useRef, useCallback } from "react";
+import { useEffect, useRef, useCallback, useMemo, memo } from "react";
 import { Mic, Info } from "lucide-react";
 import { usePlayerStore } from "../../store/playerStore";
 import { useLanguageStore } from "../../store/languageStore";
@@ -14,12 +14,16 @@ import type { LyricLine } from "../../store/playerStore";
  * - Gradient masks at top/bottom for a polished feel.
  * - Shows lyrics provider info like Spotify
  */
-export default function LyricsPanel() {
-  const { 
-    currentTrack, currentTime, showLyrics, 
-    lyricsLines, lyricsLoading, activeLyricLine, lyricsResult,
-    setActiveLyricLine, setShowLyrics, 
-  } = usePlayerStore();
+export default memo(function LyricsPanel() {
+  const currentTrack = usePlayerStore((s) => s.currentTrack);
+  const currentTime = usePlayerStore((s) => s.currentTime);
+  const showLyrics = usePlayerStore((s) => s.showLyrics);
+  const lyricsLines = usePlayerStore((s) => s.lyricsLines);
+  const lyricsLoading = usePlayerStore((s) => s.lyricsLoading);
+  const activeLyricLine = usePlayerStore((s) => s.activeLyricLine);
+  const lyricsResult = usePlayerStore((s) => s.lyricsResult);
+  const setActiveLyricLine = usePlayerStore((s) => s.setActiveLyricLine);
+  const setShowLyrics = usePlayerStore((s) => s.setShowLyrics);
   const { translations: t } = useLanguageStore();
   const containerRef = useRef<HTMLDivElement>(null);
   const lineRefs = useRef<Map<number, HTMLDivElement>>(new Map());
@@ -99,10 +103,11 @@ export default function LyricsPanel() {
 
     const providerMap: Record<string, string> = {
       lrclib: "LRCLIB",
-      "lyrics.ovh": "Lyrics.ovh",
+      netease: "NetEase Music",
       musixmatch: "Musixmatch",
       genius: "Genius",
       cached: "Saved locally",
+      youtube_captions: "YouTube Captions",
     };
 
     return providerMap[provider] || provider;
@@ -179,4 +184,4 @@ export default function LyricsPanel() {
       </div>
     </div>
   );
-}
+});

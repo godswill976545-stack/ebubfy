@@ -1,4 +1,4 @@
-import { useState, useEffect, useRef, useCallback } from "react";
+import { useState, useEffect, useRef, useCallback, memo } from "react";
 import { listen } from "@tauri-apps/api/event";
 import {
   ChevronLeft,
@@ -83,7 +83,7 @@ function PlaylistMenu({ currentTrack, isOpen, onToggle, onClose }: PlaylistMenuP
   );
 }
 
-export default function NowPlayingPage({ onBack, onSeek, onToggleQueue }: NowPlayingPageProps) {
+export default memo(function NowPlayingPage({ onBack, onSeek, onToggleQueue }: NowPlayingPageProps) {
   const {
     currentTrack, isPlaying, currentTime, duration,
     volume, isMuted, shuffle, repeat,
@@ -501,4 +501,4 @@ export default function NowPlayingPage({ onBack, onSeek, onToggleQueue }: NowPla
       </div>
     </div>
   );
-}
+});

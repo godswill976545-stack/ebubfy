@@ -43,6 +43,7 @@ pub fn run() {
             commands::lyrics::get_lyrics_by_id,
             commands::lyrics::get_lyrics_translation,
             commands::enriched_search::search_youtube_enriched,
+            commands::musicbrainz::musicbrainz_enrich,
             commands::musicbrainz::enrich_track_background,
             commands::album_artist::get_album_data,
             commands::album_artist::get_artist_data,

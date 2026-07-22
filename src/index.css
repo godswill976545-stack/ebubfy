@@ -828,6 +828,7 @@ body, .body-lg, .body-md, .label-lg, .label-sm, .headline-sm, .headline-md, .hea
   background: var(--accent);
   border-radius: 0 2px 2px 0;
   transition: width 0.3s linear;
+  will-change: width;
 }
 
 .mini-player-inner {
@@ -2119,6 +2120,8 @@ body, .body-lg, .body-md, .label-lg, .label-sm, .headline-sm, .headline-md, .hea
   left: -10%;
   filter: blur(80px) saturate(1.4);
   opacity: 0.25;
+  will-change: filter, transform;
+  transform: translateZ(0);
 }
 
 [data-theme="light"] .np-bg-img {
@@ -2302,6 +2305,7 @@ body, .body-lg, .body-md, .label-lg, .label-sm, .headline-sm, .headline-md, .hea
   cursor: pointer;
   display: flex;
   align-items: center;
+  touch-action: none;
 }
 
 .np-seekbar-track {
@@ -2324,6 +2328,7 @@ body, .body-lg, .body-md, .label-lg, .label-sm, .headline-sm, .headline-md, .hea
   background: var(--accent);
   border-radius: 2px;
   transition: width 0.1s linear;
+  will-change: width;
 }
 
 .np-seekbar:hover .np-seekbar-fill {
@@ -2340,7 +2345,8 @@ body, .body-lg, .body-md, .label-lg, .label-sm, .headline-sm, .headline-md, .hea
   background: var(--accent);
   box-shadow: 0 2px 8px rgba(0, 0, 0, 0.3);
   opacity: 0;
-  transition: opacity var(--duration-fast) ease;
+  transition: opacity var(--duration-fast) ease, left 0.1s linear;
+  will-change: left, opacity;
 }
 
 .np-seekbar:hover .np-seekbar-thumb {
@@ -2446,6 +2452,7 @@ body, .body-lg, .body-md, .label-lg, .label-sm, .headline-sm, .headline-md, .hea
   cursor: pointer;
   display: flex;
   align-items: center;
+  touch-action: none;
 }
 
 .np-vol-track {
@@ -2468,6 +2475,7 @@ body, .body-lg, .body-md, .label-lg, .label-sm, .headline-sm, .headline-md, .hea
   background: var(--accent);
   border-radius: 2px;
   transition: width 0.1s ease;
+  will-change: width;
 }
 
 .np-utility-btns {

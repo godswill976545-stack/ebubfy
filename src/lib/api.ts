@@ -14,12 +14,13 @@ const INVOKE_TIMEOUT_MS = 15000;
 
 /** Race an invoke call against a timeout so the UI never hangs indefinitely. */
 function invokeWithTimeout<T>(cmd: string, args: Record<string, unknown>): Promise<T> {
+  let timer: ReturnType<typeof setTimeout>;
   return Promise.race([
     invoke<T>(cmd, args),
     new Promise<never>((_, reject) =>
-      setTimeout(() => reject(new Error("Request timed out. Please try again.")), INVOKE_TIMEOUT_MS)
+      timer = setTimeout(() => reject(new Error("Request timed out. Please try again.")), INVOKE_TIMEOUT_MS)
     ),
-  ]);
+  ]).finally(() => clearTimeout(timer));
 }
 
 export async function searchYouTube(query: string, limit?: number): Promise<VideoResult[]> {
@@ -47,23 +48,23 @@ export interface HistoryEntry {
 }
 
 export async function getSearchHistory(): Promise<HistoryEntry[]> {
-  return invoke("get_search_history");
+  return invokeWithTimeout("get_search_history", {});
 }
 
 export async function clearSearchHistory(): Promise<void> {
-  return invoke("clear_search_history");
+  return invokeWithTimeout("clear_search_history", {});
 }
 
 export async function removeHistoryEntry(id: number): Promise<void> {
-  return invoke("remove_history_entry", { id });
+  return invokeWithTimeout("remove_history_entry", { id });
 }
 
 export async function suggestQueries(prefix: string): Promise<string[]> {
-  return invoke("suggest_queries", { prefix });
+  return invokeWithTimeout("suggest_queries", { prefix });
 }
 
 export async function cacheSearchResults(query: string, results: VideoResult[]): Promise<void> {
-  return invoke("cache_search", { query, results });
+  return invokeWithTimeout("cache_search", { query, results });
 }
 
 export interface HealthReport {
@@ -115,12 +116,12 @@ export async function getArtistSongs(artistChannelUrl: string): Promise<VideoRes
 
 // Audio
 export async function getStreamUrl(videoId: string): Promise<string> {
-  return invoke("get_stream_url", { videoId });
+  return invokeWithTimeout("get_stream_url", { videoId });
 }
 
 // Captions / Lyrics (YouTube auto-subs, synced)
 export async function getVideoCaptions(videoId: string, preferredLanguage: string): Promise<{ time: number; text: string }[]> {
-  return invoke("get_video_captions", { videoId, preferredLanguage });
+  return invokeWithTimeout("get_video_captions", { videoId, preferredLanguage });
 }
 
 // ─── Lyrics (LRCLIB + ytmusicapi) ──────────────────────────
@@ -143,40 +144,40 @@ export interface LyricsResult {
  * Returns synced LRC lyrics when available, plain text as fallback.
  */
 export async function searchLyrics(query: string, duration?: number): Promise<LyricsResult | null> {
-  return invoke("search_lyrics", { query, duration });
+  return invokeWithTimeout("search_lyrics", { query, duration });
 }
 
 // Legacy compatibility stubs
 export async function getLyricsById(trackId: number): Promise<LyricsResult | null> {
-  return invoke("get_lyrics_by_id", { trackId });
+  return invokeWithTimeout("get_lyrics_by_id", { trackId });
 }
 
 export async function getLyricsTranslation(trackId: number, language: string): Promise<string | null> {
-  return invoke("get_lyrics_translation", { trackId, language });
+  return invokeWithTimeout("get_lyrics_translation", { trackId, language });
 }
 
 // Playlists
 export async function getPlaylists(): Promise<Playlist[]> {
-  return invoke("get_playlists");
+  return invokeWithTimeout("get_playlists", {});
 }
 
 export async function createPlaylist(name: string): Promise<number> {
-  return invoke("create_playlist", { name });
+  return invokeWithTimeout("create_playlist", { name });
 }
 
 export async function deletePlaylist(playlistId: number): Promise<void> {
-  return invoke("delete_playlist", { playlistId });
+  return invokeWithTimeout("delete_playlist", { playlistId });
 }
 
 export async function getPlaylistSongs(playlistId: number): Promise<PlaylistSong[]> {
-  return invoke("get_playlist_songs", { playlistId });
+  return invokeWithTimeout("get_playlist_songs", { playlistId });
 }
 
 export async function addToPlaylist(
   playlistId: number,
   song: { videoId: string; title: string; artist?: string; thumbnail?: string }
 ): Promise<number> {
-  return invoke("add_to_playlist", {
+  return invokeWithTimeout("add_to_playlist", {
     playlistId,
     videoId: song.videoId,
     title: song.title,
@@ -186,16 +187,16 @@ export async function addToPlaylist(
 }
 
 export async function removeFromPlaylist(playlistId: number, videoId: string): Promise<void> {
-  return invoke("remove_from_playlist", { playlistId, videoId });
+  return invokeWithTimeout("remove_from_playlist", { playlistId, videoId });
 }
 
 export async function reorderPlaylistSongs(playlistId: number, videoIds: string[]): Promise<void> {
-  return invoke("reorder_playlist_songs", { playlistId, videoIds });
+  return invokeWithTimeout("reorder_playlist_songs", { playlistId, videoIds });
 }
 
 // Favorites
 export async function getFavorites(): Promise<PlaylistSong[]> {
-  return invoke("get_favorites");
+  return invokeWithTimeout("get_favorites", {});
 }
 
 export async function toggleFavorite(song: {
@@ -204,7 +205,7 @@ export async function toggleFavorite(song: {
   artist?: string;
   thumbnail?: string;
 }): Promise<boolean> {
-  return invoke("toggle_favorite", {
+  return invokeWithTimeout("toggle_favorite", {
     videoId: song.videoId,
     title: song.title,
     artist: song.artist,
@@ -219,7 +220,7 @@ export async function addRecentlyPlayed(song: {
   artist?: string;
   thumbnail?: string;
 }): Promise<void> {
-  return invoke("add_recently_played", {
+  return invokeWithTimeout("add_recently_played", {
     videoId: song.videoId,
     title: song.title,
     artist: song.artist,
@@ -228,30 +229,30 @@ export async function addRecentlyPlayed(song: {
 }
 
 export async function getRecentlyPlayed(): Promise<RecentlyPlayed[]> {
-  return invoke("get_recently_played");
+  return invokeWithTimeout("get_recently_played", {});
 }
 
 // Preferences
 export async function savePreference(key: string, value: string): Promise<void> {
-  return invoke("save_preference", { key, value });
+  return invokeWithTimeout("save_preference", { key, value });
 }
 
 export async function getPreference(key: string): Promise<string | null> {
-  return invoke("get_preference", { key });
+  return invokeWithTimeout("get_preference", { key });
 }
 
 // Lyrics file persistence
 export async function saveLyricsFile(videoId: string, lrcContent: string): Promise<void> {
-  return invoke("save_lyrics_file", { videoId, content: lrcContent });
+  return invokeWithTimeout("save_lyrics_file", { videoId, content: lrcContent });
 }
 
 export async function loadLyricsFile(videoId: string): Promise<string | null> {
-  return invoke("load_lyrics_file", { videoId });
+  return invokeWithTimeout("load_lyrics_file", { videoId });
 }
 
 // ─── YouTube Music sidecar has been removed ────────────────
 // All metadata is now served by TheAudioDB via search_youtube_enriched.
-// All lyrics come from lyrics.ovh.
+// All lyrics come from LRCLIB and NetEase Cloud Music (synced LRC).
 //
 // Stub functions below keep the frontend building while the corresponding
 // UI sections are updated to reflect the removal.

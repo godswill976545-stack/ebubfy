@@ -1,4 +1,4 @@
-import { useState, useEffect, useRef, useCallback } from "react";
+import { useState, useEffect, useRef, useCallback, memo } from "react";
 import {
   Search as SearchIcon,
   X,
@@ -279,7 +279,7 @@ function SearchSkeleton() {
 
 // ─── Main component ──────────────────────────────────────────────────────
 
-export default function SearchPage({ onPlayTrack, initialQuery, onOpenAlbum, onOpenArtist }: SearchPageProps) {
+export default memo(function SearchPage({ onPlayTrack, initialQuery, onOpenAlbum, onOpenArtist }: SearchPageProps) {
   useLanguageStore();
   const [query, setQuery] = useState(initialQuery || "");
   const [songs, setSongs] = useState<VideoResult[]>([]);
@@ -1030,4 +1030,4 @@ export default function SearchPage({ onPlayTrack, initialQuery, onOpenAlbum, onO
       )}
     </div>
   );
-}
+});

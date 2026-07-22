@@ -1,4 +1,4 @@
-import { useState, useCallback, useRef } from "react";
+import { useState, useCallback, useRef, memo } from "react";
 import { GripVertical, X, Play, Music, Trash2 } from "lucide-react";
 import {
   DndContext,
@@ -155,12 +155,14 @@ function QueueItem({ track, isPlaying, onPlay, onRemove }: QueueItemProps) {
 
 // ─── Queue Panel Component ────────────────────────────────
 
-export default function QueuePanel({ isOpen, onClose }: QueuePanelProps) {
-  const {
-    queue, currentTrack, isPlaying,
-    setCurrentTrack, setIsPlaying,
-    reorderQueue, removeFromQueue,
-  } = usePlayerStore();
+export default memo(function QueuePanel({ isOpen, onClose }: QueuePanelProps) {
+  const queue = usePlayerStore((s) => s.queue);
+  const currentTrack = usePlayerStore((s) => s.currentTrack);
+  const isPlaying = usePlayerStore((s) => s.isPlaying);
+  const setCurrentTrack = usePlayerStore((s) => s.setCurrentTrack);
+  const setIsPlaying = usePlayerStore((s) => s.setIsPlaying);
+  const reorderQueue = usePlayerStore((s) => s.reorderQueue);
+  const removeFromQueue = usePlayerStore((s) => s.removeFromQueue);
 
   const sensors = useSensors(
     useSensor(PointerSensor, {
@@ -291,4 +293,4 @@ export default function QueuePanel({ isOpen, onClose }: QueuePanelProps) {
       </div>
     </div>
   );
-}
+});

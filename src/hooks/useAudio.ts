@@ -20,14 +20,42 @@ const RETRY_DELAY_MS = 1000;
 const TIME_UPDATE_THROTTLE_MS = 250;
 const PREBUFFER_THRESHOLD = 0.65;
 
-const streamUrlCache = new Map<string, string>();
+// Stream URLs from YouTube CDN typically expire after ~6 hours.
+// Store them with a timestamp so we can discard expired entries.
+const STREAM_URL_TTL_MS = 5 * 60 * 60 * 1000; // 5 hours (conservative)
+const streamUrlCache = new Map<string, { url: string; cachedAt: number }>();
 let prebufferInProgress = false;
 
+function getCachedStreamUrl(id: string): string | null {
+  const entry = streamUrlCache.get(id);
+  if (!entry) return null;
+  if (Date.now() - entry.cachedAt > STREAM_URL_TTL_MS) {
+    streamUrlCache.delete(id);
+    return null;
+  }
+  return entry.url;
+}
+
 function getNextTrack(): { id: string } | null {
-  const { queue, queueIndex } = usePlayerStore.getState();
+  const { queue, queueIndex, shuffle, repeat } = usePlayerStore.getState();
   if (queue.length === 0) return null;
-  const nextIdx = queueIndex + 1;
-  if (nextIdx >= queue.length) return null;
+
+  let nextIdx: number;
+  if (shuffle) {
+    if (queue.length <= 1) return null;
+    do {
+      nextIdx = Math.floor(Math.random() * queue.length);
+    } while (nextIdx === queueIndex);
+  } else {
+    nextIdx = queueIndex + 1;
+    if (nextIdx >= queue.length) {
+      if (repeat === "all") {
+        nextIdx = 0;
+      } else {
+        return null;
+      }
+    }
+  }
   return queue[nextIdx];
 }
 
@@ -35,12 +63,12 @@ async function prebufferNextTrack(): Promise<void> {
   if (prebufferInProgress) return;
   const next = getNextTrack();
   if (!next) return;
-  if (streamUrlCache.has(next.id)) return;
+  if (getCachedStreamUrl(next.id)) return;
 
   prebufferInProgress = true;
   try {
     const url = await getStreamUrl(next.id);
-    streamUrlCache.set(next.id, url);
+    streamUrlCache.set(next.id, { url, cachedAt: Date.now() });
   } catch {
     // Silently fail — will fetch on-demand later
   } finally {
@@ -224,6 +252,9 @@ export function useAudio() {
       }
     }
 
+    // Clear any stale crossfade state from a previous rapid track change
+    crossfadeStateRef.current = null;
+
     let cancelled = false;
 
     const loadTrack = async (isRetry = false) => {
@@ -234,7 +265,7 @@ export function useAudio() {
       audio.removeAttribute("src");
 
       try {
-        const cachedUrl = streamUrlCache.get(currentTrack.id);
+        const cachedUrl = getCachedStreamUrl(currentTrack.id);
         if (cachedUrl) {
           streamUrlCache.delete(currentTrack.id);
           console.log(`[Audio] Loading cached stream for: ${currentTrack.title}`);
@@ -457,11 +488,17 @@ export function useAudio() {
         const secondaryEl = audioRef2.current;
         if (!secondaryEl) return;
 
-        let url = streamUrlCache.get(next.id);
+        // Guard: if the secondary element is already playing (rapid next-track),
+        // abort this crossfade and let the existing one finish.
+        if (!secondaryEl.paused && !secondaryEl.ended) {
+          return;
+        }
+
+        let url = getCachedStreamUrl(next.id);
         if (!url) {
           try {
             url = await getStreamUrl(next.id);
-            streamUrlCache.set(next.id, url);
+            streamUrlCache.set(next.id, { url, cachedAt: Date.now() });
           } catch {
             // Failed to get next URL — fall back to plain fade-out.
             setChannelGain(getActiveChannel(), Math.max(0, remaining / crossfadeSeconds), 0.1);

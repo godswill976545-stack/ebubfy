@@ -253,7 +253,7 @@ export function useLyricsFetch() {
         }
 
         if (result) {
-          // Plain lyrics from lyrics.ovh / LRCLIB: use them, but they won't sync.
+          // Plain lyrics from LRCLIB / NetEase: use them, but they won't sync.
           applyResult(result);
           const lrcContent = result.body || "";
           if (lrcContent) {

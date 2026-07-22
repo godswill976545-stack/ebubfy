@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { Music } from "lucide-react";
 
 interface LazyImageProps {
@@ -11,6 +11,12 @@ interface LazyImageProps {
 export default function LazyImage({ src, alt = "", className = "", fallback }: LazyImageProps) {
   const [loaded, setLoaded] = useState(false);
   const [error, setError] = useState(false);
+
+  // Reset loading state when src changes so old image doesn't flash
+  useEffect(() => {
+    setLoaded(false);
+    setError(false);
+  }, [src]);
 
   if (error) {
     return (

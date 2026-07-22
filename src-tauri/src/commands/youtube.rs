@@ -2,6 +2,7 @@ use serde::{Deserialize, Serialize};
 use std::process::{Output, Stdio};
 use std::time::Duration;
 
+use super::text_clean;
 use super::ytdlp::ytdlp_command;
 
 #[derive(Debug, Serialize, Deserialize, Clone)]
@@ -17,235 +18,15 @@ pub struct VideoResult {
     pub release_year: Option<i32>,
 }
 
-// ─── Title / artist cleaning ────────────────────────────────────
-
-/// Channel name suffixes to strip from artist field.
-const CHANNEL_SUFFIXES: &[&str] = &[
-    " - Topic", "- Topic", " - topic",
-    "-VEVO", " - VEVO",
-    " (Official)", " (Official Channel)",
-    " Music", " Records", " Music TV",
-    "VEVO",
-];
-
-/// Noise descriptors to strip from titles (parentheses + brackets).
-const TITLE_NOISE: &[&str] = &[
-    "official video", "official music video", "official audio",
-    "official lyric video", "official visualizer", "official trailer",
-    "clip officiel", "clip", "audio officiel",
-    "music video", "audio", "lyric video", "visualizer",
-    "lyrics", "vevo", "remaster", "remastered",
-    "live performance", "live from", "live at",
-    "explicit", "clean version", "radio edit",
-    "hd", "4k", "1080p", "720p",
-    "2024", "2023", "2022", "2021", "2020", "2019", "2018",
-    "ft. ", "feat. ",
-];
-
-/// Clean an artist name from YouTube channel metadata.
-/// Strips "- Topic", "VEVO", "Official", etc.
-/// Also handles common artist name variations (Feat., ft., &)
-fn clean_artist(raw: &str) -> String {
-    let mut result = raw.trim().to_string();
-
-    // Strip channel suffixes (VEVO, Topic, Official, etc.)
-    for suffix in CHANNEL_SUFFIXES {
-        if result.to_lowercase().ends_with(&suffix.to_lowercase()) {
-            let cut = result.len() - suffix.len();
-            result = result[..cut].trim().to_string();
-            break;
-        }
-    }
-
-    // Strip trailing " - Topic", "VEVO" etc with rfind
-    for suffix in &[" - Topic", "VEVO", "-VEVO"] {
-        if let Some(pos) = result.rfind(suffix) {
-            if result[pos + suffix.len()..].trim().is_empty() {
-                result = result[..pos].trim().to_string();
-            }
-        }
-    }
-
-    // Handle common artist variations
-    // "Artist & Artist" → "Artist"
-    if result.contains(" & ") {
-        result = result.split(" & ").next().unwrap_or(&result).to_string();
-    }
-    
-    // "Artist ft. Artist" → "Artist"
-    if result.to_lowercase().contains(" ft. ") {
-        result = result.split(" ft. ").next().unwrap_or(&result).to_string();
-    }
-    
-    // "Artist feat. Artist" → "Artist"
-    if result.to_lowercase().contains(" feat. ") {
-        result = result.split(" feat. ").next().unwrap_or(&result).to_string();
-    }
-    
-    // "Artist (feat. Artist)" → "Artist"
-    if result.contains(" (feat.") || result.contains(" (ft.") {
-        if let Some(pos) = result.find(" (feat.") {
-            result = result[..pos].trim().to_string();
-        } else if let Some(pos) = result.find(" (ft.") {
-            result = result[..pos].trim().to_string();
-        }
-    }
-
-    result
-}
-
-/// Clean a title: strip noise descriptors from parentheses/brackets,
-/// and extract the real song title if it contains "Artist - Title".
-fn clean_title(raw: &str) -> String {
-    let mut title = raw.trim().to_string();
-
-    // 1. If title contains " - ", the part BEFORE the dash might be the artist
-    // and the part AFTER is the real title. We handle artist extraction separately.
-    // Here we just clean the full string.
-
-    // 2. Strip trailing noise parentheticals: "Song (Official Video)" → "Song"
-    let has_noise_paren = |s: &str| -> bool {
-        if let Some(open_idx) = s.rfind('(') {
-            if s[open_idx..].ends_with(')') {
-                let content = s[open_idx + 1..s.len() - 1].trim().to_lowercase();
-                return TITLE_NOISE.iter().any(|n| content.contains(n));
-            }
-        }
-        false
-    };
-
-    loop {
-        let trimmed = title.trim().to_string();
-        if trimmed.is_empty() { break; }
-        if has_noise_paren(&trimmed) {
-            if let Some(open_idx) = trimmed.rfind('(') {
-                title = trimmed[..open_idx].trim().to_string();
-                continue;
-            }
-        }
-        break;
-    }
-
-    // 3. Strip trailing noise bracket groups: "Song [Official Audio]" → "Song"
-    let has_noise_bracket = |s: &str| -> bool {
-        if let Some(open_idx) = s.rfind('[') {
-            if s[open_idx..].ends_with(']') {
-                let content = s[open_idx + 1..s.len() - 1].trim().to_lowercase();
-                return TITLE_NOISE.iter().any(|n| content.contains(n));
-            }
-        }
-        false
-    };
-
-    loop {
-        let trimmed = title.trim().to_string();
-        if trimmed.is_empty() { break; }
-        if has_noise_bracket(&trimmed) {
-            if let Some(open_idx) = trimmed.rfind('[') {
-                title = trimmed[..open_idx].trim().to_string();
-                continue;
-            }
-        }
-        break;
-    }
-
-    // 4. Handle common title variations
-    // "Song (Remix)" → "Song"
-    if title.to_lowercase().contains(" (remix)") {
-        title = title.split(" (remix)").next().unwrap_or(&title).to_string();
-    }
-    
-    // "Song (Live)" → "Song"
-    if title.to_lowercase().contains(" (live)") {
-        title = title.split(" (live)").next().unwrap_or(&title).to_string();
-    }
-    
-    // "Song (Acoustic)" → "Song"
-    if title.to_lowercase().contains(" (acoustic)") {
-        title = title.split(" (acoustic)").next().unwrap_or(&title).to_string();
-    }
-    
-    // "Song (Radio Edit)" → "Song"
-    if title.to_lowercase().contains(" (radio edit)") {
-        title = title.split(" (radio edit)").next().unwrap_or(&title).to_string();
-    }
-    
-    // "Song (Explicit)" → "Song"
-    if title.to_lowercase().contains(" (explicit)") {
-        title = title.split(" (explicit)").next().unwrap_or(&title).to_string();
-    }
-    
-    // "Song (Clean)" → "Song"
-    if title.to_lowercase().contains(" (clean)") {
-        title = title.split(" (clean)").next().unwrap_or(&title).to_string();
-    }
-    
-    // "Song - Single" → "Song"
-    if title.to_lowercase().ends_with(" - single") {
-        title = title[..title.len() - 8].trim().to_string();
-    }
-    
-    // "Song - EP" → "Song"
-    if title.to_lowercase().ends_with(" - ep") {
-        title = title[..title.len() - 4].trim().to_string();
-    }
-    
-    // "Song (feat. Artist)" → "Song"
-    if title.contains(" (feat.") || title.contains(" (ft.") {
-        if let Some(pos) = title.find(" (feat.") {
-            title = title[..pos].trim().to_string();
-        } else if let Some(pos) = title.find(" (ft.") {
-            title = title[..pos].trim().to_string();
-        }
-    }
-
-    title
-}
-
-/// Extract (artist, title) from a YouTube-style "Artist - Title" string.
-/// Returns None if there's no separator or if the parts are too short.
-fn parse_artist_title(raw: &str) -> Option<(String, String)> {
-    let q = raw.trim();
-    // Find the first common YouTube-style separator: " - ", " – " (en-dash),
-    // or " — " (em-dash). Use the actual byte length of the matched separator
-    // so we never slice into the middle of a multi-byte UTF-8 character.
-    let (sep_pos, sep_len) = if let Some(pos) = q.find(" - ") {
-        (pos, " - ".len())
-    } else if let Some(pos) = q.find(" – ") {
-        (pos, " – ".len())
-    } else if let Some(pos) = q.find(" — ") {
-        (pos, " — ".len())
-    } else {
-        return None;
-    };
-
-    let raw_artist = q[..sep_pos].trim();
-    let raw_title = q[sep_pos + sep_len..].trim();
-
-    // Minimum length checks — skip if either part is suspiciously short
-    // (YouTube channel names like "CKay" are valid artists)
-    if raw_title.is_empty() || raw_artist.is_empty() {
-        return None;
-    }
-
-    // If the "artist" part is very long (>40 chars), it's probably not an artist
-    // (might be a description line like "Subscribe to our channel - Song Name")
-    if raw_artist.len() > 50 {
-        return None;
-    }
-
-    Some((raw_artist.to_string(), raw_title.to_string()))
-}
-
 /// Full metadata cleaning pipeline: given the raw uploader and title from yt-dlp,
 /// return a clean (artist, title) pair.
 fn clean_metadata(uploader: &str, raw_title: &str) -> (String, String) {
-    let clean_uploader = clean_artist(uploader);
+    let clean_uploader = text_clean::clean_artist(uploader);
 
     // Try to parse "Artist - Title" from the raw title
-    if let Some((parsed_artist, parsed_title)) = parse_artist_title(raw_title) {
-        let clean_artist_name = clean_artist(&parsed_artist);
-        let clean_title_name = clean_title(&parsed_title);
+    if let Some((parsed_artist, parsed_title)) = text_clean::parse_artist_title(raw_title) {
+        let clean_artist_name = text_clean::clean_artist(&parsed_artist);
+        let clean_title_name = text_clean::clean_title(&parsed_title);
         // Use the parsed artist if it looks better than the uploader
         // (uploader is often just the channel name, parsed artist is from the title)
         if !clean_artist_name.is_empty() && clean_artist_name != "Unknown" {
@@ -254,7 +35,7 @@ fn clean_metadata(uploader: &str, raw_title: &str) -> (String, String) {
     }
 
     // Fallback: use uploader as artist, clean the title
-    let clean_title_name = clean_title(raw_title);
+    let clean_title_name = text_clean::clean_title(raw_title);
     let artist = if clean_uploader.is_empty() {
         "Unknown Artist".to_string()
     } else {
@@ -780,16 +561,16 @@ mod tests {
     #[test]
     fn test_parse_artist_title_ascii() {
         assert_eq!(
-            parse_artist_title("Artist Name - Song Title"),
+            text_clean::parse_artist_title("Artist Name - Song Title"),
             Some(("Artist Name".to_string(), "Song Title".to_string()))
         );
     }
 
     #[test]
     fn test_parse_artist_title_en_dash() {
-        // This was the exact crash case: '–' is a 3-byte UTF-8 en-dash.
+        // This was the exact crash case: '\u{2013}' is a 3-byte UTF-8 en-dash.
         assert_eq!(
-            parse_artist_title("Artist Name – Song Title"),
+            text_clean::parse_artist_title("Artist Name \u{2013} Song Title"),
             Some(("Artist Name".to_string(), "Song Title".to_string()))
         );
     }
@@ -797,19 +578,19 @@ mod tests {
     #[test]
     fn test_parse_artist_title_em_dash() {
         assert_eq!(
-            parse_artist_title("Artist Name — Song Title"),
+            text_clean::parse_artist_title("Artist Name \u{2014} Song Title"),
             Some(("Artist Name".to_string(), "Song Title".to_string()))
         );
     }
 
     #[test]
     fn test_parse_artist_title_no_separator() {
-        assert_eq!(parse_artist_title("Just a song title"), None);
+        assert_eq!(text_clean::parse_artist_title("Just a song title"), None);
     }
 
     #[test]
     fn test_clean_metadata_en_dash() {
-        let (artist, title) = clean_metadata("Some Channel", "CKay – love nwantiti");
+        let (artist, title) = clean_metadata("Some Channel", "CKay \u{2013} love nwantiti");
         assert_eq!(artist, "CKay");
         assert_eq!(title, "love nwantiti");
     }

@@ -48,12 +48,14 @@ export default function useKeyboardShortcuts(
 
   useEffect(() => {
     const handleKeyDown = (e: KeyboardEvent) => {
-      // Don't trigger shortcuts when typing in inputs
-      const tag = (e.target as HTMLElement).tagName;
-      if (tag === "INPUT" || tag === "TEXTAREA" || tag === "SELECT") {
+      // Don't trigger shortcuts when typing in inputs, contenteditable, or IME composition
+      if (e.isComposing) return;
+      const el = e.target as HTMLElement;
+      const tag = el.tagName;
+      if (tag === "INPUT" || tag === "TEXTAREA" || tag === "SELECT" || el.isContentEditable) {
         // Allow Escape to blur inputs
         if (e.code === "Escape") {
-          (e.target as HTMLElement).blur();
+          el.blur();
         }
         return;
       }

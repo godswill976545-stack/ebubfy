@@ -159,7 +159,14 @@ export const usePlayerStore = create<PlayerState>((set, get) => ({
     let nextIndex = queueIndex + 1;
 
     if (shuffle) {
-      nextIndex = Math.floor(Math.random() * queue.length);
+      // Pick a random track that is NOT the current one
+      if (queue.length <= 1) {
+        nextIndex = queueIndex;
+      } else {
+        do {
+          nextIndex = Math.floor(Math.random() * queue.length);
+        } while (nextIndex === queueIndex && queue.length > 1);
+      }
     } else if (nextIndex >= queue.length) {
       if (repeat === "all") {
         nextIndex = 0;
@@ -227,6 +234,9 @@ export const usePlayerStore = create<PlayerState>((set, get) => ({
 
   reorderQueue: (from, to) =>
     set((state) => {
+      if (from < 0 || from >= state.queue.length || to < 0 || to >= state.queue.length || from === to) {
+        return state; // no-op
+      }
       const newQueue = [...state.queue];
       const [moved] = newQueue.splice(from, 1);
       newQueue.splice(to, 0, moved);

@@ -1,3 +1,4 @@
+use futures::stream::{self, StreamExt};
 use std::time::Duration;
 use tauri::Emitter;
 
@@ -114,7 +115,8 @@ pub async fn search_youtube_enriched(
 
 /// Look up each track on Deezer, build patches, emit `search-enriched`.
 /// Wrapped in a panic-catching layer so a single bad response can't crash
-/// the runtime.
+/// the runtime. Runs up to 5 Deezer lookups in parallel for ~5x faster
+/// enrichment compared to the old sequential approach.
 async fn enrich_and_emit(
     app: tauri::AppHandle,
     query: String,
@@ -125,32 +127,35 @@ async fn enrich_and_emit(
         tracks.len()
     );
 
-    // Spawn the enrichment work itself as a child task so we can join with
-    // a timeout and catch panics via JoinHandle::is_panicked.
-    let enrich_fut = async move {
-        let mut patches = Vec::with_capacity(tracks.len());
-        for (artist, title) in &tracks {
-            // Skip if either part is missing/garbage.
-            if artist.is_empty() || title.is_empty()
-                || artist == "Unknown Artist"
-                || title == "Unknown"
-            {
-                patches.push(make_empty_patch(artist, title));
-                continue;
-            }
+    const CONCURRENCY: usize = 5;
 
-            match tokio::time::timeout(
-                Duration::from_secs(6),
-                deezer::fetch_track_metadata(artist, title),
-            )
-            .await
-            {
-                Ok(Some(meta)) => patches.push(make_patch(artist, title, Some(&meta))),
-                Ok(None) => patches.push(make_empty_patch(artist, title)),
-                Err(_) => patches.push(make_empty_patch(artist, title)),
-            }
-        }
-        patches
+    // Spawn the enrichment work as a child task so we can join with a timeout.
+    let enrich_fut = async move {
+        let results: Vec<serde_json::Value> = stream::iter(tracks.into_iter())
+            .map(|(artist, title)| async move {
+                // Skip if either part is missing/garbage.
+                if artist.is_empty() || title.is_empty()
+                    || artist == "Unknown Artist"
+                    || title == "Unknown"
+                {
+                    return make_empty_patch(&artist, &title);
+                }
+
+                match tokio::time::timeout(
+                    Duration::from_secs(6),
+                    deezer::fetch_track_metadata(&artist, &title),
+                )
+                .await
+                {
+                    Ok(Some(meta)) => make_patch(&artist, &title, Some(&meta)),
+                    Ok(None) => make_empty_patch(&artist, &title),
+                    Err(_) => make_empty_patch(&artist, &title),
+                }
+            })
+            .buffer_unordered(CONCURRENCY)
+            .collect()
+            .await;
+        results
     };
 
     let join = tokio::spawn(enrich_fut);
